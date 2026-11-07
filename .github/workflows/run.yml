@@ -1,0 +1,62 @@
+name: run-eribank-tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 8 is needed by the project (build.gradle refuses other versions);
+      # JDK 17 is needed by the Android command-line tools.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install Appium 1.x
+        run: npm install -g appium@1.22.3
+
+      - name: Download EriBank.apk
+        run: |
+          mkdir -p Assign/app Assign/results
+          curl -fL -o Assign/app/EriBank.apk https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/eribank/EriBank.apk
+          ls -la Assign/app
+
+      - name: Run tests on Android 5.1 (API 22) emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 22
+          arch: x86
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash Assign/ci/run.sh
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eribank-results
+          path: |
+            Assign/results/
+            appium.log
+            gradle.log
+          if-no-files-found: warn
