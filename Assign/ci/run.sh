@@ -15,6 +15,9 @@ done
 curl -s http://127.0.0.1:4723/wd/hub/status
 
 cd Assign
+# the assignment files use Windows (CRLF) line endings; gradlew must be LF to run on Linux
+sed -i 's/\r$//' gradlew
 chmod +x gradlew
+mkdir -p results
 ./gradlew run --no-daemon --console=plain 2>&1 | tee ../gradle.log
 ls -la results
