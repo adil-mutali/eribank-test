@@ -67,7 +67,8 @@ public class Assignment {
 	private static void requireSummaryWithBalance(WebDriverWait wait, String amount) throws NoSuchElementException {
 		requirePage(wait, summaryPageElements, "summary");
 		try {
-			wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(@text,\'" + amount + "\')]")));
+			// the balance is shown inside a WebView, so it is exposed as content-desc rather than text
+			wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(@content-desc,\'" + amount + "\') or contains(@text,\'" + amount + "\')]")));
 		} catch (TimeoutException ex) {
 			throw new NoSuchElementException("Summary page does not show $" + amount + ".");
 		}
@@ -117,6 +118,37 @@ public class Assignment {
 			x += (int) Math.round(pixelsPerUnit * (target - shown.intValue()));
 		}
 		throw new NoSuchElementException("Slider did not reach $" + target + ".");
+	}
+
+	// An alert is present if the driver can switch to it, or its positive button is on screen
+	private static boolean alertPresent(AndroidDriver<AndroidElement> driver) {
+		try {
+			driver.switchTo().alert();
+			return true;
+		} catch (WebDriverException ex) {
+			return !driver.findElements(By.id("android:id/button1")).isEmpty();
+		}
+	}
+
+	private static void waitForAlert(AndroidDriver<AndroidElement> driver, WebDriverWait wait, String message) throws NoSuchElementException {
+		try {
+			wait.until(d -> alertPresent(driver));
+		} catch (TimeoutException ex) {
+			throw new NoSuchElementException(message);
+		}
+	}
+
+	// Accept (positive button) or dismiss (negative button) the alert
+	private static void answerAlert(AndroidDriver<AndroidElement> driver, boolean accept) {
+		try {
+			if (accept) {
+				driver.switchTo().alert().accept();
+			} else {
+				driver.switchTo().alert().dismiss();
+			}
+		} catch (WebDriverException ex) {
+			driver.findElement(By.id(accept ? "android:id/button1" : "android:id/button2")).click();
+		}
 	}
 
 	private static void pressKey(AndroidDriver<AndroidElement> driver, AndroidKey key) {
@@ -296,7 +328,7 @@ public class Assignment {
 		element = driver.findElement(byId("countryButton"));
 		element.click();
 		try {
-			wait.until(ExpectedConditions.presenceOfElementLocated(By.className("android.widget.ListView")));
+			wait.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(@class,\'ListView\') or contains(@class,\'RecyclerView\')]")));
 		} catch (TimeoutException ex) {
 			throw new NoSuchElementException("Country list did not open.");
 		}
@@ -326,17 +358,13 @@ public class Assignment {
 		hideKeyboard(driver);
 		element = driver.findElement(byId("sendPaymentButton"));
 		element.click();
-		try {
-			alert = wait.until(ExpectedConditions.alertIsPresent());
-		} catch (TimeoutException ex) {
-			throw new NoSuchElementException("Alert did not appear.");
-		}
+		waitForAlert(driver, wait, "Alert did not appear.");
 
 
 		MobileTesting.printTest(23);
 
 		// (24) Dismiss the alert and ensure now on payment page
-		alert.dismiss();
+		answerAlert(driver, false);
 		requirePage(wait, paymentPageElements, "payment");
 
 
@@ -345,17 +373,13 @@ public class Assignment {
 		// (25) Press the send payment button and ensure alert appears again
 		element = driver.findElement(byId("sendPaymentButton"));
 		element.click();
-		try {
-			alert = wait.until(ExpectedConditions.alertIsPresent());
-		} catch (TimeoutException ex) {
-			throw new NoSuchElementException("Alert did not appear again.");
-		}
+		waitForAlert(driver, wait, "Alert did not appear again.");
 
 
 		MobileTesting.printTest(25);
 
 		// (26) Accept the alert and ensure now on summary page
-		alert.accept();
+		answerAlert(driver, true);
 		requirePage(wait, summaryPageElements, "summary");
 
 
